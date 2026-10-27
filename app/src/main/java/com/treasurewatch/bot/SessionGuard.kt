@@ -16,7 +16,7 @@ class SessionGuard(requested: SessionLimits, private val startedAt: Long) {
 
     fun timedOut(now: Long) = now - startedAt >= limits.maxMinutes * 60_000L
     fun scanExpired(now: Long) = now - roomStarted >= limits.scanSeconds * 1000L
-    fun scanRemaining(now: Long) = ((limits.scanSeconds * 1000L - (now - roomStarted) + 999) / 1000).coerceAtLeast(0)
+    fun scanRemaining(now: Long) = ((limits.scanSeconds * 1000L - (now - roomStarted) + 999) / 1000).coerceAtLeast(0).toInt()
     fun recordBox(): Boolean {
         if (foundThisRoom) return false
         foundThisRoom = true
