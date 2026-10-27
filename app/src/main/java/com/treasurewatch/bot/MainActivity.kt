@@ -26,7 +26,7 @@ class MainActivity : Activity() {
     private val teal = Color.rgb(4, 135, 136)
     private val dark = Color.rgb(38, 57, 78)
     private val muted = Color.rgb(99, 115, 133)
-    private val background = Color.rgb(246, 248, 251)
+    private val backgroundColor = Color.rgb(246, 248, 251)
     private val handler = Handler(Looper.getMainLooper())
     private val settings by lazy { getSharedPreferences("settings", MODE_PRIVATE) }
     private lateinit var content: LinearLayout
@@ -47,9 +47,9 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.statusBarColor = navy
-        window.navigationBarColor = background
+        window.navigationBarColor = backgroundColor
         window.decorView.layoutDirection = View.LAYOUT_DIRECTION_RTL
-        val shell = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(background) }
+        val shell = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(backgroundColor) }
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(22), dp(16), dp(22), dp(18))
@@ -78,7 +78,7 @@ class MainActivity : Activity() {
             tabs.addView(b, LinearLayout.LayoutParams(0, dp(46), 1f))
         }
         shell.addView(tabs)
-        val scroll = ScrollView(this).apply { fillViewport = true; clipToPadding = false }
+        val scroll = ScrollView(this).apply { isFillViewport = true; clipToPadding = false }
         content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), dp(8), dp(16), dp(28))
