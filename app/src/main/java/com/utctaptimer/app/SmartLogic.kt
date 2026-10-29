@@ -21,7 +21,7 @@ object SmartLogic {
     }
     fun canTapAfterTransition(lastSeconds: Int?, millisecondsSinceReading: Long, consecutiveMissing: Int, pinkButton: Boolean, userAuthorized: Boolean, alreadyTapped: Boolean): Boolean =
         userAuthorized && !alreadyTapped && pinkButton && consecutiveMissing >= 2 &&
-            lastSeconds != null && lastSeconds in 0..1 && millisecondsSinceReading in 450..2800
+            lastSeconds != null && lastSeconds in 0..1 && millisecondsSinceReading in (if (lastSeconds == 1) 850L else 450L)..2800L
 
     fun hasOpenText(text: String): Boolean {
         val normalized = ascii(text).lowercase().trim()
