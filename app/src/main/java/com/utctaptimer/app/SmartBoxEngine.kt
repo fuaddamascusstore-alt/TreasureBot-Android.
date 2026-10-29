@@ -37,6 +37,7 @@ class SmartBoxEngine(private val service: AccessibilityService,
                      private val autoOpenIcon: Boolean,
                      private val autoTap: Boolean,
                      private val tapDurationMs: Int,
+                     private val requestedRemainingMs: Long,
                      private val finished: () -> Unit) {
     private enum class Phase { SEARCHING, OPENING, COUNTING, COMPLETED }
     private var phase = Phase.SEARCHING
@@ -90,7 +91,7 @@ class SmartBoxEngine(private val service: AccessibilityService,
             background = GradientDrawable().apply { setColor(0xe8112435.toInt()); cornerRadius = dp * 15 }
             layoutDirection = View.LAYOUT_DIRECTION_RTL
         }
-        val title = TextView(service).apply { text = "صندوق الكنز الذكي"; textSize = 15f; setTextColor(Color.WHITE); gravity = Gravity.CENTER }
+        val title = TextView(service).apply { text = "كشف + عد + ضغطة"; textSize = 15f; setTextColor(Color.WHITE); gravity = Gravity.CENTER }
         root.addView(title)
         timerUi = TextView(service).apply {
             text = "—"; textSize = 23f; typeface = android.graphics.Typeface.MONOSPACE
@@ -98,7 +99,7 @@ class SmartBoxEngine(private val service: AccessibilityService,
         }
         root.addView(timerUi)
         statusUi = TextView(service).apply {
-            text = "افتح بث تيك توك"; textSize = 11f; gravity = Gravity.CENTER; setTextColor(Color.WHITE)
+            text = "افتح بث تيك توك · الضغطة عند ${requestedRemainingMs}ms من الصفر"; textSize = 11f; gravity = Gravity.CENTER; setTextColor(Color.WHITE)
         }
         root.addView(statusUi)
         root.addView(Button(service).apply {
@@ -218,19 +219,33 @@ class SmartBoxEngine(private val service: AccessibilityService,
         if (phase == Phase.COUNTING && lastTimerSeconds != null) {
             val lastMs = (now - lastTimerNs) / 1_000_000
             if (lastTimerSeconds!! <= 1 && pink) missingNearZero++ else missingNearZero = 0
-            if ((accessibleOpenSeen && pink && lastTimerSeconds!! <= 1 && lastMs >= (if (lastTimerSeconds == 1) 850 else 450) && lastMs <= 2800) ||
-                SmartLogic.canTapAfterTransition(lastTimerSeconds, lastMs, missingNearZero, pink, autoTap, tapped)) {
+
+            // Target time is relative to estimated visual zero. Visual verification
+            // always takes priority over the requested timestamp.
+            val openLabel = rawText.lineSequence().any { SmartLogic.hasOpenText(it.trim()) }
+            val accessibleAction = accessibleOpenSeen && pink && lastTimerSeconds!! <= 1 &&
+                lastMs >= (if (lastTimerSeconds == 1) 850 else 450) && lastMs <= 2800
+            val observedTransition = SmartLogic.canTapAfterTransition(
+                lastTimerSeconds, lastMs, missingNearZero, pink, autoTap, tapped
+            )
+            val buttonReady = accessibleAction || (pink && openLabel && lastTimerSeconds!! <= 1) || observedTransition
+            if (buttonReady && !tapped && autoTap) {
                 if (minimumCoins > 0 && (coins == null || coins!! < minimumCoins)) {
                     report("لا ضغط: لم نتأكد أن العملات ≥ $minimumCoins")
-                } else if (autoTap && !tapped) {
-                    tapped = true
-                    phase = Phase.COMPLETED
-                    val x = bitmap.width * .50f
-                    val y = bitmap.height * .883f
-                    report("ظهر زر الفتح — إرسال ضغطة واحدة")
-                    finishFrame(bitmap, 0, rescan = false)
-                    sendGesture(x, y, "زر فتح الصندوق")
-                    return
+                } else {
+                    val requestedMomentNs = expectedEndNs - requestedRemainingMs * 1_000_000L
+                    if (requestedMomentNs > now) {
+                        report("زر الفتح ظهر — انتظار وقت الضغطة المختار")
+                    } else if (isTikTokActive()) {
+                        tapped = true
+                        phase = Phase.COMPLETED
+                        val x = bitmap.width * .50f
+                        val y = bitmap.height * .883f
+                        report("تم تأكيد حالة الفتح — إرسال ضغطة واحدة")
+                        finishFrame(bitmap, 0, rescan = false)
+                        sendGesture(x, y, "زر فتح الصندوق")
+                        return
+                    }
                 }
             }
             if (lastMs > 3100 && lastTimerSeconds!! <= 1) {

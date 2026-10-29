@@ -1,29 +1,27 @@
-# UTC Smart Tap — standalone Android (not RAWAFID)
+# UTC Smart Treasure Timer v3 — one unified screen
 
-Android 11+ (API 30+), Kotlin, no root, no backend.
+Independent Android Kotlin application. **Not related to RAWAFID.**
 
-## Modes
+## Unified flow
+1. Enable the manually approved Accessibility service.
+2. Enter the tap time relative to the visual chest countdown zero: `00:00.000` means zero; `00:00.200` means 200 ms before the estimated zero; `-00:00.100` means 100 ms after. Set the duration of the requested tap (default 10 ms) and optional minimum number of coins.
+3. Opt in to automatic opening of the small box icon and optionally to one automatic click. Press the **single** start button.
+4. Open TikTok LIVE. Local accessibility screenshots and ML Kit OCR detect the box, read the countdown and start the **same** floating timer automatically. No manual seconds entry is required.
+5. A click is only considered after visual/accessibility evidence of a changed, actionable Open button. If the requested millisecond arrives **before** that evidence, the app may act later; it cannot open the chest early. One click maximum. An emergency Stop button is always visible.
 
-1. **Manual UTC reference timer**: user enters countdown (e.g. 40 seconds), touch duration, remaining time and target coordinates. The app launches exactly one gesture at the requested countdown point. The monotonic timer is used for the countdown; UTC is only a wall-clock reference.
-2. **Smart TikTok treasure timer (experimental)**: user starts a five-minute accessibility-screen-capture session in TikTok LIVE. The app looks for a top-right gift icon with a visible clock, can tap to open its details, reads the large modal countdown via local bundled ML Kit Latin OCR, and estimates its own remaining time from visual transitions. A checkbox explicitly opts into a single tap when the opening state is confirmed. No auto-scrolling, account credentials, reward claims, network requests or image uploads.
-
-## Important limitations
-
-- TikTok's timer is **not** synchronized to UTC. Displayed countdown seconds do not reveal server-side milliseconds; no reliable optimal tap millisecond can be promised.
-- Screenshot rate limits and OCR latency make the visual timer approximate. The app uses the last visible second transition and the *change of the large pink button*, not a guessed UTC timestamp.
-- The OCR engine supports Latin/ASCII digits and Arabic-Indic digits *when recognized*; Arabic word recognition is not guaranteed. Accessibility node text provides an additional indication for Open/فتح/Aç, but many TikTok elements are drawn as inaccessible graphics.
-- Strict guards: only TikTok app package foreground, visually verified pink button, recent visible 0 or 1 seconds, at least two missing counter reads, user opt-in and one tap per session. If uncertain, **no tap**.
-- Auto-open detection uses screen-relative geometry and color checks matching the reference screen supplied by the user; TikTok UI changes and screen layouts can cause false negatives. **Not tested on a physical phone**.
-- A request for a 1 ms Android gesture is not equivalent to a guaranteed 1 ms physical touch. Android accessibility operations are asynchronous.
-- This application may be restricted by TikTok terms or Google Play accessibility policy; the operator is responsible for appropriate use.
-- Android's restricted accessibility settings for sideloaded APKs must be enabled by the user if permitted by the device.
-- GitHub Actions debug signing keys are ephemeral; upgrading from v1 may require uninstalling the older APK before installing v2 (which clears local settings).
+## Accuracy and restrictions
+- TikTok's visible timer is not synchronized to UTC. No use of wall-clock UTC for box opening.
+- ML Kit reads **displayed seconds**, not the app server's private millisecond deadline. Screen capture/OCR + Android gesture injection add latency. The displayed milliseconds are **estimates only**, and there is no guaranteed winning or opening moment.
+- The detector depends on the reference interface's geometry/colors and needs **on-device validation**; app UI revisions may break it.
+- On ambiguous OCR, missing coin value when a minimum is requested, missing pink button transition or missing TikTok foreground, **do not tap**.
+- The Android Accessibility service must be explicitly enabled; sideload restrictions may require user action.
+- User session capped at 5 minutes; no auto-scrolling or room search; no TikTok password, API keys, remote data upload, network permission or secret collection.
+- This automation may be subject to the third-party app's terms of service and Android Play restrictions.
 
 ## Build
+JDK 17, Android SDK 35, Gradle 8.11.1.
+`gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug`
+The workflow for `smart/unified-timer-v3-20261029` uploads `UTC-Unified-Smart-Timer-v3-APK`.
 
-JDK 17, Gradle 8.11.1, Android SDK platform/build-tools 35; run `gradle :app:testDebugUnitTest :app:assembleDebug`. Build output: `app/build/outputs/apk/debug/app-debug.apk`. CI attaches the APK and SHA256 checksum.
-
-## Privacy
-
-All screenshot analysis is ephemeral, entirely in memory on-device. No INTERNET permission, no storage of screen content, no analytics. Start and stop are under user control. Overlay Stop button cancels local monitoring and closes OCR.
-
+## Installation
+This version updates `versionCode` to 3. Debug signatures from different CI runs may vary. If upgrading fails with a signature mismatch, uninstall the old debug APK and install v3 again (which clears app preferences).

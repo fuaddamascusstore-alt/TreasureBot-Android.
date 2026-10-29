@@ -9,8 +9,8 @@ android {
         applicationId = "com.utctaptimer.app"
         minSdk = 30
         targetSdk = 35
-        versionCode = 2
-        versionName = "2.0-smart"
+        versionCode = 3
+        versionName = "3.0-unified"
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

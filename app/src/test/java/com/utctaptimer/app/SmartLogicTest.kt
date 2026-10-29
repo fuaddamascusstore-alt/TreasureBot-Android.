@@ -30,5 +30,16 @@ class SmartLogicTest {
         assertTrue(SmartLogic.hasOpenText("Aç"))
         assertFalse(SmartLogic.hasOpenText("Open your profile".replace("Open ", "Opened ")))
     }
+    @Test fun unifiedTapOffsetParserAcceptsMillisecondsAndSignedTimes() {
+        assertEquals(200L, SmartLogic.requestedRemainingMs("00:00.200"))
+        assertEquals(500L, SmartLogic.requestedRemainingMs("0.500"))
+        assertEquals(0L, SmartLogic.requestedRemainingMs("00:00.000"))
+        assertEquals(-100L, SmartLogic.requestedRemainingMs("-00:00.100"))
+        assertNull(SmartLogic.requestedRemainingMs("01:05.001"))
+        assertNull(SmartLogic.requestedRemainingMs("00:77.500"))
+        assertNull(SmartLogic.requestedRemainingMs("hello"))
+        assertNull(SmartLogic.requestedRemainingMs("-00:06.000"))
+    }
+
 }
 

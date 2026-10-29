@@ -1,7 +1,7 @@
-name: Build UTC Smart Treasure Timer APK
+name: Build UTC Unified Smart Timer v3 APK
 on:
   push:
-    branches: [smart/treasure-timer-v2]
+    branches: [smart/unified-timer-v3-20261029]
   workflow_dispatch:
 permissions:
   contents: read
@@ -31,7 +31,7 @@ jobs:
           sha256sum app/build/outputs/apk/debug/app-debug.apk > app/build/outputs/apk/debug/SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: UTC-Smart-Treasure-Timer-v2-APK
+          name: UTC-Unified-Smart-Timer-v3-APK
           path: |
             app/build/outputs/apk/debug/app-debug.apk
             app/build/outputs/apk/debug/SHA256SUMS.txt
