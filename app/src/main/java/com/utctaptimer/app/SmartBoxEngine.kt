@@ -129,7 +129,7 @@ class SmartBoxEngine(private val service: AccessibilityService,
         if (node == null || depth > 12) return null
         val label = listOfNotNull(node.text?.toString(), node.contentDescription?.toString()).joinToString(" ")
         val rect = Rect().also { node.getBoundsInScreen(it) }
-        if (SmartLogic.hasOpenText(label) && rect.width() > 35 && rect.centerY() > service.resources.displayMetrics.heightPixels * .6f) return rect
+        if (SmartLogic.hasOpenText(label) && node.isClickable && rect.width() > 35 && rect.centerY() > service.resources.displayMetrics.heightPixels * .83f) return rect
         for (i in 0 until min(40, node.childCount)) {
             val child = node.getChild(i) ?: continue
             val found = findActionNode(child, depth + 1)
@@ -218,7 +218,7 @@ class SmartBoxEngine(private val service: AccessibilityService,
         if (phase == Phase.COUNTING && lastTimerSeconds != null) {
             val lastMs = (now - lastTimerNs) / 1_000_000
             if (lastTimerSeconds!! <= 1 && pink) missingNearZero++ else missingNearZero = 0
-            if ((accessibleOpenSeen && pink && lastTimerSeconds!! <= 1 && lastMs in 450..2800) ||
+            if ((accessibleOpenSeen && pink && lastTimerSeconds!! <= 1 && lastMs >= (if (lastTimerSeconds == 1) 850 else 450) && lastMs <= 2800) ||
                 SmartLogic.canTapAfterTransition(lastTimerSeconds, lastMs, missingNearZero, pink, autoTap, tapped)) {
                 if (minimumCoins > 0 && (coins == null || coins!! < minimumCoins)) {
                     report("لا ضغط: لم نتأكد أن العملات ≥ $minimumCoins")
