@@ -54,7 +54,7 @@ class MainActivity : Activity() {
         window.statusBarColor = NAVY
         val preferences = getSharedPreferences(PREFS, MODE_PRIVATE)
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(26, 28, 26, 20); setBackgroundColor(0xfff2f5f8.toInt()); layoutDirection = View.LAYOUT_DIRECTION_RTL }
-        val scroll = ScrollView(this).apply { fillViewport = true }
+        val scroll = ScrollView(this).apply { isFillViewport = true }
         scroll.addView(root)
         setContentView(scroll)
         fun label(s: String, size: Float, color: Int = NAVY) = TextView(this).apply { text = s; textSize = size; setTextColor(color); setPadding(0, 10, 0, 10) }
