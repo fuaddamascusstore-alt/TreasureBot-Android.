@@ -2,6 +2,7 @@ name: Build UTC Tap Timer APK
 on:
   push:
     branches: [utc-tap-timer-v1]
+  pull_request:
   workflow_dispatch:
 permissions:
   contents: read
