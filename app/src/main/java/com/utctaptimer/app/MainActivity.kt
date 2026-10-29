@@ -6,6 +6,7 @@ import android.app.Activity
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.Path
+import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.Bundle
@@ -19,6 +20,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
+import android.widget.CheckBox
 import android.widget.Button
 import android.widget.EditText
 import android.widget.FrameLayout
@@ -32,258 +34,296 @@ import java.util.Locale
 import java.util.TimeZone
 import kotlin.math.max
 
-private const val STORE = "tap_timer"
-private const val NAVY = -15589316
-private const val TEAL = -16742144
-private fun background(color: Int): GradientDrawable = GradientDrawable().apply { setColor(color); cornerRadius = 18f }
-private fun clockText(millis: Long): String {
-    val m = max(0L, millis)
-    return String.format(Locale.US, "%02d:%02d.%03d", m / 60000L, m / 1000L % 60L, m % 1000L)
+private const val PREFS = "utc_tap_timer"
+private const val NAVY = 0xff102238.toInt()
+private const val TEAL = 0xff008b8b.toInt()
+private fun bg(color: Int, radius: Float = 18f) = GradientDrawable().apply { setColor(color); cornerRadius = radius }
+private fun formatted(ms: Long): String {
+    val safe = max(0L, ms)
+    return "%02d:%02d.%03d".format(Locale.US, safe / 60000, (safe / 1000) % 60, safe % 1000)
 }
-private fun utcText(epoch: Long): String = SimpleDateFormat("HH:mm:ss.SSS 'UTC'", Locale.US).apply {
-    timeZone = TimeZone.getTimeZone("UTC")
-}.format(Date(epoch))
+private fun utc(epoch: Long): String = SimpleDateFormat("HH:mm:ss.SSS 'UTC'", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }.format(Date(epoch))
 
 class MainActivity : Activity() {
+    private lateinit var seconds: EditText
+    private lateinit var target: EditText
+    private lateinit var duration: EditText
+    private lateinit var status: TextView
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val prefs = getSharedPreferences(STORE, MODE_PRIVATE)
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundColor(0xfff3f6fa.toInt())
-            setPadding(28, 28, 28, 24)
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
-        }
-        val scroll = ScrollView(this)
+        window.statusBarColor = NAVY
+        val preferences = getSharedPreferences(PREFS, MODE_PRIVATE)
+        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(26, 28, 26, 20); setBackgroundColor(0xfff2f5f8.toInt()); layoutDirection = View.LAYOUT_DIRECTION_RTL }
+        val scroll = ScrollView(this).apply { fillViewport = true }
         scroll.addView(root)
         setContentView(scroll)
-        fun label(text: String): TextView = TextView(this).apply {
-            this.text = text; textSize = 17f; setTextColor(NAVY); setPadding(0, 14, 0, 10)
-        }
-        root.addView(label("عداد UTC الذكي").apply { textSize = 25f })
-        root.addView(label("عداد يدوي عائم وضغطة واحدة في الوقت المحدد"))
-        fun field(title: String, value: String): EditText {
-            root.addView(label(title))
-            val e = EditText(this).apply {
-                setText(prefs.getString(title, value))
-                inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
-                textSize = 23f
-                setSingleLine(true)
+        fun label(s: String, size: Float, color: Int = NAVY) = TextView(this).apply { text = s; textSize = size; setTextColor(color); setPadding(0, 10, 0, 10) }
+        root.addView(label("UTC SMART TAP", 24f).apply { typeface = Typeface.DEFAULT_BOLD })
+        root.addView(label("عداد يدوي + مراقب صناديق الكنز محلياً", 14f))
+        fun field(title: String, default: String): EditText {
+            root.addView(label(title, 15f))
+            return EditText(this).also {
+                it.setText(preferences.getString(title, default))
+                it.inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+                it.textSize = 22f
+                it.setSingleLine(true)
+                it.setSelectAllOnFocus(true)
+                it.setBackgroundColor(Color.WHITE)
+                it.setPadding(18, 14, 18, 14)
+                root.addView(it, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = 12 })
             }
-            root.addView(e)
-            return e
         }
-        val seconds = field("مدة العد بالثواني", "40")
-        val remaining = field("الضغطة عند بقاء (ثانية، مثل 0.500)", "0.500")
-        val stroke = field("مدة الضغطة (ms، مثل 1)", "1")
-        fun btn(text: String, block: () -> Unit) {
-            val b = Button(this).apply { this.text = text; isAllCaps = false; textSize = 17f }
-            root.addView(b)
-            b.setOnClickListener { block() }
+        seconds = field("مدة العداد بالثواني", "40")
+        target = field("اضغط عندما يتبقى (ثانية) — مثال 0.500", "0.500")
+        duration = field("مدة اللمسة (ميلي ثانية) — مثال 1", "1")
+        fun button(text: String, action: () -> Unit) {
+            val b = Button(this).apply { this.text = text; textSize = 16f; isAllCaps = false; setTextColor(Color.WHITE); background = bg(TEAL) }
+            root.addView(b, LinearLayout.LayoutParams(-1, 58).apply { topMargin = 12 })
+            b.setOnClickListener { action() }
         }
-        btn("1. تفعيل خدمة اللمس من إعدادات الهاتف") {
+        button("1 — تفعيل خدمة اللمس من إعدادات الهاتف") {
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
         }
-        btn("2. عرض العداد فوق الشاشة") {
+        button("2 — إظهار العداد العائم") {
             val s = seconds.text.toString().toDoubleOrNull()
-            val r = remaining.text.toString().toDoubleOrNull()
-            val d = stroke.text.toString().toDoubleOrNull()?.toInt()
-            if (s == null || r == null || d == null || s <= 0.0 || s > 3600.0 || r < 0.0 || r >= s || d !in 1..1000) {
-                Toast.makeText(this, "القيم غير صالحة", Toast.LENGTH_LONG).show()
-                return@btn
+            val t = target.text.toString().toDoubleOrNull()
+            val d = duration.text.toString().toIntOrNull()
+            if (s == null || t == null || d == null || s <= 0 || s > 3600 || t < 0 || t >= s || d !in 1..1000) {
+                Toast.makeText(this, "قيم غير صحيحة: مدة 1–3600 ثانية، ووقت الضغطة أقل من المدة، ولمسة 1–1000ms", Toast.LENGTH_LONG).show()
+                return@button
             }
-            prefs.edit().putString("مدة العد بالثواني", seconds.text.toString())
-                .putString("الضغطة عند بقاء (ثانية، مثل 0.500)", remaining.text.toString())
-                .putString("مدة الضغطة (ms، مثل 1)", stroke.text.toString()).apply()
-            val service = TapService.active
-            if (service == null) {
-                Toast.makeText(this, "فعّل خدمة UTC Tap Timer من إمكانية الوصول", Toast.LENGTH_LONG).show()
+            preferences.edit().putString("مدة العداد بالثواني", seconds.text.toString())
+                .putString("اضغط عندما يتبقى (ثانية) — مثال 0.500", target.text.toString())
+                .putString("مدة اللمسة (ميلي ثانية) — مثال 1", duration.text.toString()).apply()
+            val svc = TapService.active
+            if (svc == null) {
+                Toast.makeText(this, "فعّل خدمة UTC Tap Timer في إمكانية الوصول أولاً", Toast.LENGTH_LONG).show()
                 startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
             } else {
-                service.openPanel((s * 1000).toLong(), (r * 1000).toLong(), d)
+                svc.openPanel((s * 1000).toLong(), (t * 1000).toLong(), d)
                 moveTaskToBack(true)
             }
         }
-        root.addView(label("اختر نقطة الضغط من النافذة العائمة أولاً، افتح التطبيق الذي تريده، ثم اضغط ابدأ. توقيت 1ms المطلوب ليس مضموناً من أندرويد. لا يتم جمع بيانات."))
+        status = label("", 13f)
+        root.addView(status)
+        root.addView(label("الوضع الذكي: يكشف عداد الصندوق من شاشة TikTok، ويراقب تبدّل زر الفتح. القراءة والضغط غير مضمونين ولا يعتمد النظام على UTC لتوقيت تيك توك.", 14f))
+        root.addView(label("الحد الأدنى للعملات (0 = أي صندوق)", 15f))
+        val minCoins = EditText(this).apply { setText(preferences.getInt("minCoins", 0).toString()); inputType = InputType.TYPE_CLASS_NUMBER; setSingleLine(true); textSize = 22f }
+        root.addView(minCoins)
+        val autoIcon = CheckBox(this).apply { text = "فتح نافذة تفاصيل الصندوق تلقائياً إذا تم كشف أيقونته"; isChecked = true }
+        root.addView(autoIcon)
+        val autoTap = CheckBox(this).apply { text = "أوافق على ضغطة واحدة عند التأكد بصرياً من ظهور زر الفتح"; isChecked = false }
+        root.addView(autoTap)
+        root.addView(label("تنبيه: إذن إمكانية الوصول يسمح بقراءة الشاشة وتنفيذ لمسة. لا نسجل صوراً أو نرسلها لخادم. التشغيل داخل تيك توك فقط، والجلسة 5 دقائق كحد أقصى.", 13f))
+        button("3 — ابدأ مراقبة صندوق الكنز الذكية") {
+            val min = minCoins.text.toString().toIntOrNull()
+            val d = duration.text.toString().toIntOrNull()
+            if (min == null || min !in 0..1000000 || d == null || d !in 1..1000) {
+                Toast.makeText(this, "تحقق من العملات ومدة اللمس", Toast.LENGTH_LONG).show()
+                return@button
+            }
+            val svc = TapService.active
+            if (svc == null) {
+                Toast.makeText(this, "فعّل خدمة إمكانية الوصول أولاً", Toast.LENGTH_LONG).show()
+                startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+            } else {
+                preferences.edit().putInt("minCoins", min).apply()
+                svc.openSmartPanel(min, autoIcon.isChecked, autoTap.isChecked, d)
+                moveTaskToBack(true)
+            }
+        }
+        root.addView(label("لتجربة الوضع الذكي، افتح بثاً به صندوق. إذا تعذر كشف الأيقونة افتح تفاصيل الصندوق يدوياً. اختبر أولاً دون تفعيل الضغط التلقائي.", 14f))
+    }
+    override fun onResume() {
+        super.onResume()
+        // Re-check after returning from accessibility settings.
+        if (::status.isInitialized) status.text = if (TapService.active != null) "خدمة اللمس مفعّلة" else "خدمة اللمس غير مفعّلة"
     }
 }
 
 class TapService : AccessibilityService() {
     companion object { @Volatile var active: TapService? = null; private set }
-    private val handler = Handler(Looper.getMainLooper())
-    private val manager by lazy { getSystemService(WINDOW_SERVICE) as WindowManager }
+    private val main = Handler(Looper.getMainLooper())
+    private val wm by lazy { getSystemService(WINDOW_SERVICE) as WindowManager }
     private var panel: View? = null
     private var picker: View? = null
-    private var count: TextView? = null
-    private var status: TextView? = null
-    private var start: Button? = null
+    private var textTimer: TextView? = null
+    private var textStatus: TextView? = null
+    private var startButton: Button? = null
     private var totalMs = 40000L
-    private var remainingMs = 500L
-    private var gestureMs = 1
-    private var startNanos = 0L
+    private var targetMs = 500L
+    private var touchMs = 1
+    private var startNs = 0L
     private var utcAtStart = 0L
     private var utcSource = ""
     private var running = false
-    private var fired = false
-    private var scheduled: Runnable? = null
-    private val tick = object : Runnable {
+    private var executed = false
+    private var scheduledTap: Runnable? = null
+    private var smart: SmartBoxEngine? = null
+    private val ticker = object : Runnable {
         override fun run() {
             if (!running) return
-            val elapsed = (SystemClock.elapsedRealtimeNanos() - startNanos) / 1000000L
-            count?.text = clockText(totalMs - elapsed)
-            status?.text = utcText(utcAtStart + elapsed) + " · " + utcSource
+            val elapsed = (SystemClock.elapsedRealtimeNanos() - startNs) / 1_000_000
+            textTimer?.text = formatted(totalMs - elapsed)
+            val epoch = utcAtStart + elapsed
+            textStatus?.text = "${utc(epoch)}  ·  $utcSource"
             if (elapsed >= totalMs) {
                 running = false
-                start?.isEnabled = true
-                count?.text = "00:00.000"
-            } else handler.postDelayed(this, 16L)
+                startButton?.isEnabled = true
+                textTimer?.text = "00:00.000"
+                if (!executed) textStatus?.text = "انتهى العد دون تنفيذ اللمس"
+            } else main.postDelayed(this, 16L)
         }
     }
+
     override fun onServiceConnected() { super.onServiceConnected(); active = this }
-    override fun onAccessibilityEvent(event: AccessibilityEvent?) {}
-    override fun onInterrupt() { stop("أُلغيت العملية") }
-    override fun onDestroy() { stop("أُغلقت الخدمة"); removePicker(); removePanel(); active = null; super.onDestroy() }
-    private fun params(w: Int, h: Int) = WindowManager.LayoutParams(
-        w, h, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) { smart?.onEvent(event) }
+    override fun onInterrupt() { cancelCountdown("أُلغيت العملية بواسطة النظام"); smart?.stop("أوقف النظام المراقبة") }
+    override fun onDestroy() { cancelCountdown("أغلقت الخدمة"); smart?.stop("أغلقت الخدمة"); smart = null; removePicker(); removePanel(); active = null; super.onDestroy() }
+
+    private fun params(w: Int, h: Int) = WindowManager.LayoutParams(w, h,
+        WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
         WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
-        android.graphics.PixelFormat.TRANSLUCENT
-    ).apply { gravity = Gravity.TOP or Gravity.END; x = 12; y = 120 }
-    private val Int.dp: Int get() = (this * resources.displayMetrics.density + 0.5f).toInt()
-    fun openPanel(total: Long, remaining: Long, duration: Int) {
-        stop("جاهز")
+        android.graphics.PixelFormat.TRANSLUCENT).apply { gravity = Gravity.TOP or Gravity.END; x = 12; y = 140 }
+
+    fun openPanel(total: Long, tapAtRemaining: Long, gestureMs: Int) {
+        smart?.stop("تم التحويل للعداد اليدوي"); smart = null
+        cancelCountdown("جاهز")
+        totalMs = total; targetMs = tapAtRemaining; touchMs = gestureMs
         removePanel()
-        totalMs = total; remainingMs = remaining; gestureMs = duration
         val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL; setPadding(16, 12, 16, 12)
-            background = background(NAVY); layoutDirection = View.LAYOUT_DIRECTION_RTL
+            orientation = LinearLayout.VERTICAL
+            setPadding(18, 12, 18, 14)
+            background = bg(NAVY, 24f)
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
         }
-        val lp = params(300.dp, -2)
-        val title = TextView(this).apply {
-            text = "UTC TIMER • اسحب للتحريك"; setTextColor(Color.WHITE)
-            textSize = 13f; gravity = Gravity.CENTER
-        }
-        root.addView(title)
-        title.setOnTouchListener(object : View.OnTouchListener {
-            var x = 0f; var y = 0f; var oldX = 0; var oldY = 0
-            override fun onTouch(v: View, ev: MotionEvent): Boolean {
-                if (ev.actionMasked == MotionEvent.ACTION_DOWN) {
-                    x = ev.rawX; y = ev.rawY; oldX = lp.x; oldY = lp.y
-                } else if (ev.actionMasked == MotionEvent.ACTION_MOVE) {
-                    lp.x = max(0, oldX + (x - ev.rawX).toInt())
-                    lp.y = max(0, oldY + (ev.rawY - y).toInt())
-                    try { manager.updateViewLayout(root, lp) } catch (_: Exception) {}
-                }
-                return true
+        val lp = params(290.dp, WindowManager.LayoutParams.WRAP_CONTENT)
+        val header = TextView(this).apply { text = "UTC TIMER  •  اسحب للتحريك"; textSize = 12f; setTextColor(Color.WHITE); gravity = Gravity.CENTER; setPadding(5, 5, 5, 8) }
+        root.addView(header)
+        header.setOnTouchListener(object : View.OnTouchListener {
+            var downX = 0f; var downY = 0f; var originX = 0; var originY = 0
+            override fun onTouch(v: View, event: MotionEvent): Boolean {
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> { downX = event.rawX; downY = event.rawY; originX = lp.x; originY = lp.y; return true }
+                    MotionEvent.ACTION_MOVE -> { lp.x = max(0, originX + (downX - event.rawX).toInt()); lp.y = max(0, originY + (event.rawY - downY).toInt()); try { wm.updateViewLayout(root, lp) } catch (_: Exception) {}; return true }
+                }; return true
             }
         })
-        count = TextView(this).apply {
-            text = clockText(totalMs); setTextColor(Color.WHITE)
-            textSize = 38f; gravity = Gravity.CENTER; typeface = android.graphics.Typeface.MONOSPACE
-        }
-        root.addView(count)
-        status = TextView(this).apply {
-            text = "حدد نقطة اللمس ثم ابدأ · " + clockText(remainingMs)
-            setTextColor(0xff9bebdf.toInt()); textSize = 12f; gravity = Gravity.CENTER
-        }
-        root.addView(status)
-        fun button(text: String, click: () -> Unit) = Button(this).apply {
-            this.text = text; isAllCaps = false; textSize = 12f
-            setOnClickListener { click() }
-        }
-        val row = LinearLayout(this)
-        start = button("ابدأ", ::begin)
-        row.addView(start, LinearLayout.LayoutParams(0, 48.dp, 1f))
-        row.addView(button("إلغاء") { stop("أُلغي العد"); count?.text = clockText(totalMs) },
-            LinearLayout.LayoutParams(0, 48.dp, 1f))
+        textTimer = TextView(this).apply { text = formatted(totalMs); setTextColor(Color.WHITE); textSize = 37f; typeface = Typeface.MONOSPACE; gravity = Gravity.CENTER; setPadding(0, 2, 0, 2) }
+        root.addView(textTimer)
+        textStatus = TextView(this).apply { text = "اضغط ابدأ للعد • تنفيذ عند ${formatted(targetMs)}"; setTextColor(0xff96ebe6.toInt()); textSize = 11f; gravity = Gravity.CENTER; setPadding(0, 2, 0, 10) }
+        root.addView(textStatus)
+        fun button(t: String, cb: () -> Unit): Button = Button(this).apply { text = t; textSize = 13f; isAllCaps = false; setTextColor(Color.WHITE); background = bg(TEAL, 12f); setOnClickListener { cb() } }
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        startButton = button("ابدأ", ::startCountdown)
+        row.addView(startButton, LinearLayout.LayoutParams(0, 50.dp, 1f))
+        row.addView(button("إلغاء", { cancelCountdown("ألغيت العد"); textTimer?.text = formatted(totalMs) }), LinearLayout.LayoutParams(0, 50.dp, 1f))
         root.addView(row)
-        val row2 = LinearLayout(this)
-        row2.addView(button("تحديد النقطة", ::pick), LinearLayout.LayoutParams(0, 48.dp, 1f))
-        row2.addView(button("إغلاق") { stop("أُغلق"); removePanel() }, LinearLayout.LayoutParams(0, 48.dp, 1f))
-        root.addView(row2)
-        try { manager.addView(root, lp); panel = root }
-        catch (_: Exception) { Toast.makeText(this, "تعذر إظهار العداد", Toast.LENGTH_SHORT).show() }
+        val secondRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        secondRow.addView(button("تحديد النقطة", ::choosePoint), LinearLayout.LayoutParams(0, 48.dp, 1f))
+        secondRow.addView(button("إغلاق", { cancelCountdown("أغلق العداد"); removePanel() }), LinearLayout.LayoutParams(0, 48.dp, 1f))
+        root.addView(secondRow)
+        try { wm.addView(root, lp); panel = root }
+        catch (e: Exception) { Toast.makeText(this, "فشل عرض النافذة: ${e.message}", Toast.LENGTH_LONG).show() }
     }
-    private fun pick() {
-        if (running) { status?.text = "ألغِ العد قبل تحديد النقطة"; return }
+
+    fun openSmartPanel(minCoins: Int, openIcon: Boolean, tap: Boolean, durationMs: Int) {
+        cancelCountdown("التحويل للوضع الذكي")
+        removePanel()
+        smart?.stop("إعادة بدء المراقبة")
+        val newEngine = SmartBoxEngine(this, minCoins, openIcon, tap, durationMs) { smart = null }
+        smart = newEngine
+        newEngine.start()
+    }
+
+    private fun choosePoint() {
+        if (running) { Toast.makeText(this, "ألغِ العداد قبل تغيير النقطة", Toast.LENGTH_SHORT).show(); return }
         removePicker()
-        val cover = FrameLayout(this).apply { setBackgroundColor(0x77000000) }
-        val message = TextView(this).apply {
-            text = "المس النقطة المستهدفة"; textSize = 23f
-            setTextColor(Color.WHITE); setPadding(16, 100, 16, 0); gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-        }
-        cover.addView(message)
+        val cover = FrameLayout(this).apply { setBackgroundColor(0x66000000) }
+        val message = TextView(this).apply { text = "المس المكان المطلوب للضغطة\nلإلغاء التحديد اضغط رجوع"; textSize = 22f; gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL; setPadding(18, 80, 18, 20); setTextColor(Color.WHITE) }
+        cover.addView(message, FrameLayout.LayoutParams(-1, -1))
         cover.setOnTouchListener { _, event ->
             if (event.actionMasked == MotionEvent.ACTION_UP) {
-                val x = event.rawX; val y = event.rawY
-                getSharedPreferences(STORE, MODE_PRIVATE).edit().putFloat("x", x).putFloat("y", y).apply()
+                val xx = event.rawX; val yy = event.rawY
+                getSharedPreferences(PREFS, MODE_PRIVATE).edit().putFloat("tapX", xx).putFloat("tapY", yy).apply()
                 removePicker()
-                status?.text = "تم حفظ النقطة: " + x.toInt() + ", " + y.toInt()
+                textStatus?.text = "نقطة الضغط: X=${xx.toInt()} Y=${yy.toInt()}"
             }
             true
         }
-        try { manager.addView(cover, params(-1, -1).apply { gravity = Gravity.TOP or Gravity.START; x = 0; y = 0 }); picker = cover }
-        catch (_: Exception) { status?.text = "تعذر اختيار النقطة" }
+        try {
+            wm.addView(cover, params(-1, -1).apply { gravity = Gravity.TOP or Gravity.START; x = 0; y = 0 }); picker = cover
+        } catch (e: Exception) { Toast.makeText(this, "تعذر تحديد النقطة", Toast.LENGTH_SHORT).show() }
     }
-    private fun begin() {
-        val prefs = getSharedPreferences(STORE, MODE_PRIVATE)
-        if (!prefs.contains("x") || !prefs.contains("y")) { status?.text = "حدد نقطة اللمس أولاً"; return }
-        stop("بدء")
+
+    private fun startCountdown() {
+        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+        if (!prefs.contains("tapX") || !prefs.contains("tapY")) {
+            textStatus?.text = "حدد نقطة الضغط أولاً"; return
+        }
+        cancelCountdown("بدء")
         val before = SystemClock.elapsedRealtimeNanos()
-        val network = if (Build.VERSION.SDK_INT >= 33) {
-            try { SystemClock.currentNetworkTimeClock().instant().toEpochMilli() }
-            catch (_: Exception) { null }
-        } else null
+        val networkUtc = if (Build.VERSION.SDK_INT >= 33) try { SystemClock.currentNetworkTimeClock().instant().toEpochMilli() } catch (_: Exception) { null } else null
         val after = SystemClock.elapsedRealtimeNanos()
-        startNanos = (before + after) / 2L
-        utcAtStart = network ?: System.currentTimeMillis()
-        utcSource = if (network != null) "UTC شبكة" else "UTC الجهاز غير متزامن"
-        running = true; fired = false
-        start?.isEnabled = false
-        handler.post(tick)
-        val delay = totalMs - remainingMs
-        val trigger = object : Runnable {
+        utcAtStart = (networkUtc ?: System.currentTimeMillis()) + ((after - before) / 2_000_000)
+        utcSource = if (networkUtc != null) "UTC شبكة" else "UTC الجهاز (غير موثّق)"
+        startNs = (before + after) / 2
+        running = true; executed = false
+        startButton?.isEnabled = false
+        main.post(ticker)
+        val triggerDelay = max(0, totalMs - targetMs)
+        val task = object : Runnable {
             override fun run() {
-                if (!running || fired) return
-                val elapsed = (SystemClock.elapsedRealtimeNanos() - startNanos) / 1000000L
-                if (elapsed < delay) handler.postDelayed(this, max(1L, delay - elapsed))
-                else { fired = true; sendGesture(elapsed - delay) }
+                if (!running || executed) return
+                val elapsed = (SystemClock.elapsedRealtimeNanos() - startNs) / 1_000_000
+                if (elapsed < triggerDelay) {
+                    main.postDelayed(this, max(1, triggerDelay - elapsed))
+                } else {
+                    executed = true
+                    sendTap(elapsed - triggerDelay)
+                }
             }
         }
-        scheduled = trigger
-        handler.postDelayed(trigger, delay)
+        scheduledTap = task
+        main.postDelayed(task, triggerDelay)
     }
-    private fun sendGesture(late: Long) {
-        val prefs = getSharedPreferences(STORE, MODE_PRIVATE)
-        val x = prefs.getFloat("x", -1f)
-        val y = prefs.getFloat("y", -1f)
-        if (x < 0 || y < 0) { stop("إحداثيات غير صالحة"); return }
-        val oldPanel = panel
-        if (oldPanel != null) { try { manager.removeView(oldPanel) } catch (_: Exception) {}; panel = null }
+
+    private fun sendTap(latenessMs: Long) {
+        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+        val x = prefs.getFloat("tapX", -1f)
+        val y = prefs.getFloat("tapY", -1f)
+        if (x < 0 || y < 0) { cancelCountdown("نقطة لمس غير صالحة"); return }
+        val view = panel
+        if (view != null) {
+            try { wm.removeView(view) } catch (_: Exception) {}
+            panel = null
+        }
         val path = Path().apply { moveTo(x, y) }
-        val gesture = GestureDescription.Builder().addStroke(
-            GestureDescription.StrokeDescription(path, 0L, gestureMs.toLong())
-        ).build()
+        val gesture = GestureDescription.Builder().addStroke(GestureDescription.StrokeDescription(path, 0L, touchMs.toLong())).build()
         val accepted = dispatchGesture(gesture, object : GestureResultCallback() {
-            override fun onCompleted(g: GestureDescription?) {
-                handler.post { status?.text = "تم إرسال اللمس · تأخير الجدولة " + late + "ms" }
-            }
-            override fun onCancelled(g: GestureDescription?) {
-                handler.post { status?.text = "ألغى النظام اللمس" }
-            }
-        }, handler)
-        if (!accepted) status?.text = "النظام رفض الإيماءة"
-        handler.postDelayed({
-            if (panel == null && oldPanel != null) {
-                try { manager.addView(oldPanel, params(300.dp, -2)); panel = oldPanel }
+            override fun onCompleted(gestureDescription: GestureDescription?) { main.post { textStatus?.text = "أرسلت الضغطة (تأخير الجدولة ~${latenessMs}ms)" } }
+            override fun onCancelled(gestureDescription: GestureDescription?) { main.post { textStatus?.text = "ألغي اللمس بواسطة النظام" } }
+        }, main)
+        if (!accepted) textStatus?.text = "رفض النظام إرسال الضغطة"
+        // Restore control after the touch event so the overlay cannot intercept the gesture.
+        main.postDelayed({
+            if (panel == null && view != null) {
+                try { wm.addView(view, params(290.dp, -2)); panel = view }
                 catch (_: Exception) {}
             }
-        }, max(350L, gestureMs.toLong() + 120L))
+        }, max(300L, touchMs + 120L))
     }
-    private fun stop(text: String) {
-        running = false; handler.removeCallbacks(tick)
-        scheduled?.let { handler.removeCallbacks(it) }
-        scheduled = null; start?.isEnabled = true; status?.text = text
+
+    private fun cancelCountdown(reason: String) {
+        running = false
+        main.removeCallbacks(ticker)
+        scheduledTap?.let { main.removeCallbacks(it) }
+        scheduledTap = null
+        textStatus?.text = reason
+        startButton?.isEnabled = true
     }
-    private fun removePanel() { panel?.let { try { manager.removeView(it) } catch (_: Exception) {} }; panel = null; status = null; count = null; start = null }
-    private fun removePicker() { picker?.let { try { manager.removeView(it) } catch (_: Exception) {} }; picker = null }
+    private fun removePanel() { panel?.let { try { wm.removeView(it) } catch (_: Exception) {} }; panel = null; textTimer = null; textStatus = null; startButton = null }
+    private fun removePicker() { picker?.let { try { wm.removeView(it) } catch (_: Exception) {} }; picker = null }
+    private val Int.dp: Int get() = (this * resources.displayMetrics.density + 0.5f).toInt()
 }
+
