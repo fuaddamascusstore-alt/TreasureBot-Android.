@@ -1,8 +1,7 @@
-name: Build UTC Tap Timer APK
+name: Build UTC Smart Treasure Timer APK
 on:
   push:
-    branches: [utc-tap-timer-v1]
-  pull_request:
+    branches: [smart/treasure-timer-v2]
   workflow_dispatch:
 permissions:
   contents: read
@@ -19,17 +18,22 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
-      - name: Install SDK
+      - name: Install Android SDK 35
         run: |
           set -euo pipefail
           SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager -print -quit)"
           "$SDKMANAGER" --sdk_root="$ANDROID_HOME" 'platforms;android-35' 'build-tools;35.0.0'
-      - name: Compile APK
-        run: gradle --no-daemon :app:assembleDebug
-      - name: Check APK
-        run: test -s app/build/outputs/apk/debug/app-debug.apk
+      - name: Build debug APK
+        run: gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug
+      - name: Verify APK
+        run: |
+          test -s app/build/outputs/apk/debug/app-debug.apk
+          sha256sum app/build/outputs/apk/debug/app-debug.apk > app/build/outputs/apk/debug/SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: UTC-Tap-Timer-APK
-          path: app/build/outputs/apk/debug/app-debug.apk
-          retention-days: 14
+          name: UTC-Smart-Treasure-Timer-v2-APK
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            app/build/outputs/apk/debug/SHA256SUMS.txt
+          retention-days: 30
+
