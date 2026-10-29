@@ -45,99 +45,94 @@ private fun formatted(ms: Long): String {
 private fun utc(epoch: Long): String = SimpleDateFormat("HH:mm:ss.SSS 'UTC'", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }.format(Date(epoch))
 
 class MainActivity : Activity() {
-    private lateinit var seconds: EditText
-    private lateinit var target: EditText
-    private lateinit var duration: EditText
-    private lateinit var status: TextView
+    private lateinit var info: TextView
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.statusBarColor = NAVY
-        val preferences = getSharedPreferences(PREFS, MODE_PRIVATE)
-        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(26, 28, 26, 20); setBackgroundColor(0xfff2f5f8.toInt()); layoutDirection = View.LAYOUT_DIRECTION_RTL }
-        val scroll = ScrollView(this).apply { isFillViewport = true }
+        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(28, 26, 28, 26)
+            setBackgroundColor(0xfff2f5f8.toInt())
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+        }
+        val scroll = ScrollView(this)
         scroll.addView(root)
         setContentView(scroll)
-        fun label(s: String, size: Float, color: Int = NAVY) = TextView(this).apply { text = s; textSize = size; setTextColor(color); setPadding(0, 10, 0, 10) }
-        root.addView(label("UTC SMART TAP", 24f).apply { typeface = Typeface.DEFAULT_BOLD })
-        root.addView(label("عداد يدوي + مراقب صناديق الكنز محلياً", 14f))
-        fun field(title: String, default: String): EditText {
-            root.addView(label(title, 15f))
+        fun label(s: String, size: Float = 16f): TextView = TextView(this).apply {
+            text = s; textSize = size; setTextColor(NAVY); setPadding(0, 14, 0, 12)
+        }
+        root.addView(label("العداد الذكي الموحد", 25f).apply { typeface = Typeface.DEFAULT_BOLD })
+        root.addView(label("اقرأ عداد صندوق تيك توك، احسب الوقت الباقي تلقائياً، واضغط ضغطة واحدة إذا تأكد ظهور زر الفتح.", 15f))
+        fun field(title: String, value: String, decimal: Boolean): EditText {
+            root.addView(label(title))
             return EditText(this).also {
-                it.setText(preferences.getString(title, default))
-                it.inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
-                it.textSize = 22f
-                it.setSingleLine(true)
-                it.setSelectAllOnFocus(true)
-                it.setBackgroundColor(Color.WHITE)
-                it.setPadding(18, 14, 18, 14)
-                root.addView(it, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = 12 })
+                it.setText(prefs.getString(title, value))
+                it.inputType = InputType.TYPE_CLASS_NUMBER or
+                    (if (decimal) InputType.TYPE_NUMBER_FLAG_DECIMAL or InputType.TYPE_NUMBER_FLAG_SIGNED else 0)
+                // Timing also accepts MM:SS.mmm, so allow colon in the editable field.
+                if (decimal) it.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+                it.textSize = 22f; it.setSingleLine(true); it.setSelectAllOnFocus(true)
+                it.setPadding(16, 12, 16, 12); it.setBackgroundColor(Color.WHITE)
+                root.addView(it)
             }
         }
-        seconds = field("مدة العداد بالثواني", "40")
-        target = field("اضغط عندما يتبقى (ثانية) — مثال 0.500", "0.500")
-        duration = field("مدة اللمسة (ميلي ثانية) — مثال 1", "1")
+        val targetInput = field("موعد الضغط بالنسبة للصفر", "00:00.000", true)
+        root.addView(label("00:00.000 = عند الصفر · 00:00.200 = قبل الصفر بـ200ms · -00:00.100 = بعده بـ100ms. لن يضغط قبل ظهور زر الفتح.", 13f))
+        val durationInput = field("مدة الضغطة بالميلي ثانية", "10", false)
+        val coinInput = field("الحد الأدنى للعملات (0 = أي صندوق)", "0", false)
+        val autoOpen = CheckBox(this).apply {
+            text = "فتح تفاصيل الصندوق تلقائياً إذا تم التعرف على الأيقونة"
+            isChecked = prefs.getBoolean("autoOpen", true)
+        }
+        root.addView(autoOpen)
+        val autoTap = CheckBox(this).apply {
+            text = "أفعّل ضغطة واحدة تلقائياً عند تحقق شروط الفتح"
+            isChecked = prefs.getBoolean("autoTap", false)
+        }
+        root.addView(autoTap)
+        info = label("تتطلب المراقبة إذن إمكانية الوصول. تُقرأ الشاشة محلياً دون إرسال بيانات. عند فشل الكشف لا يتم الضغط.", 13f)
+        root.addView(info)
         fun button(text: String, action: () -> Unit) {
-            val b = Button(this).apply { this.text = text; textSize = 16f; isAllCaps = false; setTextColor(Color.WHITE); background = bg(TEAL) }
-            root.addView(b, LinearLayout.LayoutParams(-1, 58).apply { topMargin = 12 })
+            val b = Button(this).apply {
+                this.text = text; textSize = 17f; isAllCaps = false
+                setTextColor(Color.WHITE); background = bg(TEAL)
+            }
+            root.addView(b, LinearLayout.LayoutParams(-1, (55*resources.displayMetrics.density).toInt()).apply { topMargin = 14 })
             b.setOnClickListener { action() }
         }
-        button("1 — تفعيل خدمة اللمس من إعدادات الهاتف") {
-            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-        }
-        button("2 — إظهار العداد العائم") {
-            val s = seconds.text.toString().toDoubleOrNull()
-            val t = target.text.toString().toDoubleOrNull()
-            val d = duration.text.toString().toIntOrNull()
-            if (s == null || t == null || d == null || s <= 0 || s > 3600 || t < 0 || t >= s || d !in 1..1000) {
-                Toast.makeText(this, "قيم غير صحيحة: مدة 1–3600 ثانية، ووقت الضغطة أقل من المدة، ولمسة 1–1000ms", Toast.LENGTH_LONG).show()
+        button("تفعيل إذن إمكانية الوصول") { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
+        button("بدء كشف الصندوق + العد + الضغط") {
+            val offsetMs = SmartLogic.requestedRemainingMs(targetInput.text.toString())
+            val duration = durationInput.text.toString().toIntOrNull()
+            val minCoins = coinInput.text.toString().toIntOrNull()
+            if (offsetMs == null || duration == null || duration !in 1..1000 || minCoins == null || minCoins !in 0..1_000_000) {
+                Toast.makeText(this, "تحقق من الموعد (مثل 00:00.200) ومدة اللمس والعملات", Toast.LENGTH_LONG).show()
                 return@button
             }
-            preferences.edit().putString("مدة العداد بالثواني", seconds.text.toString())
-                .putString("اضغط عندما يتبقى (ثانية) — مثال 0.500", target.text.toString())
-                .putString("مدة اللمسة (ميلي ثانية) — مثال 1", duration.text.toString()).apply()
-            val svc = TapService.active
-            if (svc == null) {
-                Toast.makeText(this, "فعّل خدمة UTC Tap Timer في إمكانية الوصول أولاً", Toast.LENGTH_LONG).show()
+            val service = TapService.active
+            if (service == null) {
+                Toast.makeText(this, "فعّل خدمة UTC Smart Timer أولاً", Toast.LENGTH_LONG).show()
                 startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-            } else {
-                svc.openPanel((s * 1000).toLong(), (t * 1000).toLong(), d)
-                moveTaskToBack(true)
-            }
-        }
-        status = label("", 13f)
-        root.addView(status)
-        root.addView(label("الوضع الذكي: يكشف عداد الصندوق من شاشة TikTok، ويراقب تبدّل زر الفتح. القراءة والضغط غير مضمونين ولا يعتمد النظام على UTC لتوقيت تيك توك.", 14f))
-        root.addView(label("الحد الأدنى للعملات (0 = أي صندوق)", 15f))
-        val minCoins = EditText(this).apply { setText(preferences.getInt("minCoins", 0).toString()); inputType = InputType.TYPE_CLASS_NUMBER; setSingleLine(true); textSize = 22f }
-        root.addView(minCoins)
-        val autoIcon = CheckBox(this).apply { text = "فتح نافذة تفاصيل الصندوق تلقائياً إذا تم كشف أيقونته"; isChecked = true }
-        root.addView(autoIcon)
-        val autoTap = CheckBox(this).apply { text = "أوافق على ضغطة واحدة عند التأكد بصرياً من ظهور زر الفتح"; isChecked = false }
-        root.addView(autoTap)
-        root.addView(label("تنبيه: إذن إمكانية الوصول يسمح بقراءة الشاشة وتنفيذ لمسة. لا نسجل صوراً أو نرسلها لخادم. التشغيل داخل تيك توك فقط، والجلسة 5 دقائق كحد أقصى.", 13f))
-        button("3 — ابدأ مراقبة صندوق الكنز الذكية") {
-            val min = minCoins.text.toString().toIntOrNull()
-            val d = duration.text.toString().toIntOrNull()
-            if (min == null || min !in 0..1000000 || d == null || d !in 1..1000) {
-                Toast.makeText(this, "تحقق من العملات ومدة اللمس", Toast.LENGTH_LONG).show()
                 return@button
             }
-            val svc = TapService.active
-            if (svc == null) {
-                Toast.makeText(this, "فعّل خدمة إمكانية الوصول أولاً", Toast.LENGTH_LONG).show()
-                startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-            } else {
-                preferences.edit().putInt("minCoins", min).apply()
-                svc.openSmartPanel(min, autoIcon.isChecked, autoTap.isChecked, d)
-                moveTaskToBack(true)
-            }
+            prefs.edit()
+                .putString("موعد الضغط بالنسبة للصفر", targetInput.text.toString())
+                .putString("مدة الضغطة بالميلي ثانية", durationInput.text.toString())
+                .putString("الحد الأدنى للعملات (0 = أي صندوق)", coinInput.text.toString())
+                .putBoolean("autoOpen", autoOpen.isChecked)
+                .putBoolean("autoTap", autoTap.isChecked)
+                .apply()
+            service.openSmartPanel(minCoins, autoOpen.isChecked, autoTap.isChecked, duration, offsetMs)
+            moveTaskToBack(true)
         }
-        root.addView(label("لتجربة الوضع الذكي، افتح بثاً به صندوق. إذا تعذر كشف الأيقونة افتح تفاصيل الصندوق يدوياً. اختبر أولاً دون تفعيل الضغط التلقائي.", 14f))
+        root.addView(label("الوقت المعروض تقديري: تيك توك لا يعرض ميلي ثانية الخادم. يجب التأكد من قابلية الضغط على الزر. لا يمكن ضمان فوز الصندوق أو توقيت 1ms.", 13f))
     }
     override fun onResume() {
         super.onResume()
-        // Re-check after returning from accessibility settings.
-        if (::status.isInitialized) status.text = if (TapService.active != null) "خدمة اللمس مفعّلة" else "خدمة اللمس غير مفعّلة"
+        if (::info.isInitialized) info.text = if (TapService.active != null)
+            "خدمة إمكانية الوصول مفعلة. الإعدادات كلها في هذه الشاشة."
+        else "خدمة إمكانية الوصول غير مفعلة. فعّلها أولاً من الزر أعلاه."
     }
 }
 
@@ -227,11 +222,11 @@ class TapService : AccessibilityService() {
         catch (e: Exception) { Toast.makeText(this, "فشل عرض النافذة: ${e.message}", Toast.LENGTH_LONG).show() }
     }
 
-    fun openSmartPanel(minCoins: Int, openIcon: Boolean, tap: Boolean, durationMs: Int) {
+    fun openSmartPanel(minCoins: Int, openIcon: Boolean, tap: Boolean, durationMs: Int, targetRemainingMs: Long) {
         cancelCountdown("التحويل للوضع الذكي")
         removePanel()
         smart?.stop("إعادة بدء المراقبة")
-        val newEngine = SmartBoxEngine(this, minCoins, openIcon, tap, durationMs) { smart = null }
+        val newEngine = SmartBoxEngine(this, minCoins, openIcon, tap, durationMs, targetRemainingMs) { smart = null }
         smart = newEngine
         newEngine.start()
     }
