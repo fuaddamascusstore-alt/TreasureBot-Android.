@@ -1,4 +1,1 @@
-<resources>
-    <string name="app_name">Treasure Watch — مراقبة LIVE</string>
-    <string name="service_description">خدمة مراقبة محلية تقرأ نصوص وعناصر تيك توك أثناء تشغيل جلسة وافق عليها المستخدم؛ وتفحص لقطات الشاشة محلياً فقط عند إضافة صورة معايرة. لا تنقر ولا تجمع المكافآت ولا ترسل بيانات إلى خادم. يمكنك إيقافها فوراً.</string>
-</resources>
+<resources><string name="service_description">عداد عائم: اختيار مكان اللمس بواسطة المستخدم وإرسال ضغطة واحدة عند بلوغ وقت معين. لا يقرأ محتوى التطبيقات ولا يجمع بيانات.</string></resources>
